@@ -218,4 +218,7 @@ __marimo__/
 # Visuals
 *.png
 *.jpg
-*.pdf*.html
+*.pdf
+*.html
+
+
