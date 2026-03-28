@@ -5,14 +5,12 @@ import pandas as pd
 from datetime import datetime
 import pytz
 import streamlit as st
-import folium
-import google-generativeai as genai
+import anthropic
+
 # ------------------------ SETTINGS ------------------------
 ox.settings.use_cache = True
 ox.settings.requests_timeout = 300
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemini-2.5-flash')
-
+client = anthropic.Anthropic()
 
 # ------------------------ Extracting the 'Walk' network for BCN ------------------------
 gpkg_path = "/Users/Rhys/Quiet_Routing_Engine/noise_data_2017.gpkg" #Hardcoded path to the GeoPackage for noise data. Will need to be updated. 
@@ -140,18 +138,46 @@ if st.button("Find route"):
         route_quiet = ox.shortest_path(G, orig, dest, weight='weighted_cost')
         route_fast_edges = ox.routing.route_to_gdf(G, route_fast)
         route_quiet_edges = ox.routing.route_to_gdf(G, route_quiet)
+    
+    #Find which roads are in the quiet but not in the fast route.
+    filtered_quiet = route_quiet_edges[route_quiet_edges['highway'].isin(['primary', 'secondary', 'residential', 'pedestrian'])]
+    quiet_road_names = filtered_quiet['name'].explode().unique().tolist()
+    
+    
+    filtered_fast = route_fast_edges[route_fast_edges['highway'].isin(['primary', 'secondary', 'residential'])] #Kept the main roads so we can say which roads are avoided. 
+    fast_road_names = filtered_fast['name'].explode().unique().tolist()
+
+    main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names] #List comprehension to find which roads are in the fast route but not in the quiet route.
+    avoided_road_noise = edges_projected.loc[filtered_fast.index, 'noise_values'].mean().round() 
+
+    quiet_road_noise = edges_projected.loc[filtered_quiet.index, 'noise_values'].mean().round()
+
 
     len_fast = route_fast_edges['length'].sum()
     len_quiet = route_quiet_edges['length'].sum()
 
-    st.metric(label="Fast Route", value=f"{len_fast:.2f} meters")
-    st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet:.2f} meters")
+    fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and could be improved by using more granular speed data based on road type, slope, etc.
+    quiet_time = (len_quiet / 1000 * 12).round()
+
+    st.subheader("Route Comparison")
+    st.metric(label="Fast Route", value=f"{len_fast:.2f} meters. Estimated time: {fast_time} minutes")
+    st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet:.2f} meters. Estimated time: {quiet_time} minutes.")
+    """
+    "The quiet route, based on {k_label} mode, has an average noise level of {quiet_road_noise} dB, compared to {avoided_road_noise} dB on the main roads avoided. 
+    The quiet route avoids the following main roads: {', '.join(main_roads_avoided)}, and will take you {(quiet_time - fast_time)/fast_time*100:.0f}% longer
+    than the fastest route, but with a significantly quieter walking experience."
+    """
+    response = client.messages.create(
+    model="claude-sonnet-4.5",
+    max_tokens=1024,
+    system="You are a helpful walking assistant.",
+    messages=[
+        {"role": "user", "content": "Write a Python function to reverse a string."}
+    ]
+)
 
     #Plotting routes using OSMNX's built-in plotting function, with custom colours and line widths for better visibility. Nodes are hidden for a cleaner look.
     fig, ax = ox.plot_graph_routes(G, [route_fast, route_quiet], 
                                 route_colors=['r', 'g'], 
                                 route_linewidth=4, node_size=0)
     st.pyplot(fig)
-
-
-# ------------------------------ INTERFACE FOR INTERACTIVE MAP ------------------------------
