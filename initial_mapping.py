@@ -13,8 +13,8 @@ ox.settings.requests_timeout = 300
 client = anthropic.Anthropic()
 
 # ------------------------ Extracting the 'Walk' network for BCN ------------------------
-gpkg_path = "/Users/Rhys/Quiet_Routing_Engine/noise_data_2017.gpkg" #Hardcoded path to the GeoPackage for noise data. Will need to be updated. 
-@st.cache_data #Cache the graph loading to speed up subsequent runs, especially during development.
+gpkg_path = "noise_data_2017.gpkg"
+@st.cache_data #Caching the graph to speed up subsequent runs, especially during development.
 def load_graph(address, dist=3000):
     print("Scanning Barcelona...")
     G = ox.graph_from_address(address, dist, network_type="walk")
