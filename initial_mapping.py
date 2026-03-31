@@ -79,7 +79,7 @@ def map_data_join(_edges, gpkg_path, noise_column):     #Have put "_edges" so th
 
     joined = joined[~joined.index.duplicated(keep='first')] 
     
-    # Converting column to floats - they're stored as strings in the GeoPackage. Added regex too to find upper bound of noise range, and take only two digits.
+    # Converting column to floats as they're stored as strings in the GeoPackage. Added regex to find upper bound of noise range, and take only two digits.
     noise_values = pd.to_numeric(joined[noise_column].str.extract("- (\d+)")[0], errors='coerce').fillna(75) # Assuming 75 dB for streets without noise data, which is a conservative estimate to avoid false positives.
 
     edges_projected['noise_values'] = noise_values
@@ -87,10 +87,12 @@ def map_data_join(_edges, gpkg_path, noise_column):     #Have put "_edges" so th
     return noise_normalised, edges_projected
 
 
+
+
 # ---------------------- Applying Noise Constraints to the Edges --------------------
 
 def set_noise_constraints(noise_normalised, edges_projected, k):
-    return edges_projected['length'] * (noise_normalised) ** k #decibels are logarithmic, so we apply the exponent to reflect the non-linear increase in perceived noise. 
+    return edges_projected['length'] + (noise_normalised ** k) * 500 #decibels are logarithmic, so we apply the exponent to reflect the non-linear increase in perceived noise. 
 
 noise_normalised, edges_projected = map_data_join(edges, gpkg_path, noise_column) #Joining the noise data to the edges, and normalising it. This is cached to speed up subsequent runs, as this is the most computationally expensive part of the process.
 weighted_cost = set_noise_constraints(noise_normalised, edges_projected, k) #Applying the noise constraints to the edges, with the selected k value.
@@ -127,7 +129,6 @@ if end_point is None:
     st.error("Couldn't geocode destination. Please check your input and try again.")
     st.stop()
 
-
 # ------------ ROUTE MAPPING AND VISUALISATION -------------
 if st.button("Find route"):
     orig = ox.distance.nearest_nodes(G, X=start_point[1], Y=start_point[0])
@@ -139,18 +140,13 @@ if st.button("Find route"):
         route_fast_edges = ox.routing.route_to_gdf(G, route_fast)
         route_quiet_edges = ox.routing.route_to_gdf(G, route_quiet)
     
-    #Find which roads are in the quiet but not in the fast route.
-    filtered_quiet = route_quiet_edges[route_quiet_edges['highway'].isin(['primary', 'secondary', 'residential', 'pedestrian'])]
-    quiet_road_names = filtered_quiet['name'].explode().unique().tolist()
-    
-    
-    filtered_fast = route_fast_edges[route_fast_edges['highway'].isin(['primary', 'secondary', 'residential'])] #Kept the main roads so we can say which roads are avoided. 
-    fast_road_names = filtered_fast['name'].explode().unique().tolist()
-
+    #Finding which roads are in the quiet but not in the fast route.
+    quiet_road_names = route_quiet_edges['name'].explode().unique().tolist()
+    fast_road_names = route_fast_edges['name'].explode().unique().tolist()
     main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names] #List comprehension to find which roads are in the fast route but not in the quiet route.
-    avoided_road_noise = edges_projected.loc[filtered_fast.index, 'noise_values'].mean().round() 
-
-    quiet_road_noise = edges_projected.loc[filtered_quiet.index, 'noise_values'].mean().round()
+    
+    fast_noise = edges_projected.loc[route_fast_edges.index, 'noise_values'].mean().round() 
+    quiet_noise = edges_projected.loc[route_quiet_edges.index, 'noise_values'].mean().round()
 
 
     len_fast = route_fast_edges['length'].sum()
@@ -162,9 +158,12 @@ if st.button("Find route"):
     st.metric(label="Fast Route", value=f"{len_fast:.2f} meters. Estimated time: {fast_time} minutes")
     st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet:.2f} meters. Estimated time: {quiet_time} minutes.")
     
+    st.write(fast_noise)
+    st.write(quiet_noise)
+
     user_prompt = f"""Fast route time: {fast_time} mins. Quiet route time: {quiet_time} mins.
-        Average noise on avoided roads: {avoided_road_noise} dB.
-        Average noise on quiet route: {quiet_road_noise} dB.
+        Average noise on fast route: {fast_noise} dB.
+        Average noise on quiet route: {quiet_noise} dB.
         Main roads avoided: {', '.join(main_roads_avoided[:3])}."""
     
     response = client.messages.create(
@@ -175,7 +174,7 @@ if st.button("Find route"):
         Focus on the noise levels, roads avoided, and time difference in your summary. 
         Note that decibels are logarithmic — a 10dB reduction is perceived as approximately half as loud.
         Avoid giving specific percentages and instead use qualitative language like "noticeably quieter" or "significantly reduced".
-        Reflect this in your summary so the user understands the real impact of the noise difference."
+        Reflect this in your summary so the user understands the real impact of the noise difference.
         2 sentences maximum.""",
         messages=[
         {"role": "user", "content": user_prompt}
