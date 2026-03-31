@@ -172,7 +172,7 @@ if st.button("Find route"):
         system=f"""You are a helpful walking assistant that provides a concise summary of the features of a quietness-optimised route through barcelona, 
         in contrast to the fastest route. The user has chosen {k_label} as their mode. 
         Focus on the noise levels, roads avoided, and time difference in your summary. 
-        Note that decibels are logarithmic — a 10dB reduction is perceived as approximately half as loud.
+        Note that decibels are logarithmic — their increase and decrease is not linear, so even a small difference in dB can have a significant impact on perceived noise.
         Avoid giving specific percentages and instead use qualitative language like "noticeably quieter" or "significantly reduced".
         Reflect this in your summary so the user understands the real impact of the noise difference.
         2 sentences maximum.""",
