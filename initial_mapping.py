@@ -12,6 +12,26 @@ ox.settings.use_cache = True
 ox.settings.requests_timeout = 300
 client = anthropic.Anthropic()
 
+# ------------------------ Streamlit Session State Initialisation ------------------------
+if 'route_fast' not in st.session_state:
+    st.session_state.route_fast = None
+
+if 'orig' not in st.session_state:
+    st.session_state.orig = None
+
+if 'dest' not in st.session_state:
+    st.session_state.dest = None
+
+if 'last_k_label' not in st.session_state:
+    st.session_state.last_k_label = None
+
+if 'summary' not in st.session_state:
+    st.session_state.summary = None
+
+if 'last_route' not in st.session_state:
+    st.session_state.last_route = None
+
+
 # ------------------------ Extracting the 'Walk' network for BCN ------------------------
 gpkg_path = "noise_data_2017.gpkg"
 @st.cache_data #Caching the graph to speed up subsequent runs, especially during development.
@@ -43,7 +63,7 @@ def get_noise_column():
 noise_column = get_noise_column() #Calling function outside the caching that comes below so that it can rerun based on datetime.now
 
 # -------------------- STREAMLIT SLIDER FOR NOISE SENSITIVITY (k) --------------------
-k_label = st.select_slider(    #Tuning parameter to adjust influence of noise on the overall cost. 
+k_label = st.sidebar.select_slider(    #Tuning parameter to adjust influence of noise on the overall cost. 
         'Walking preference',
         options=['Fastest', 'Balanced', 'Quiet', 'Serene'],
         value='Balanced'    #Hardcoded starting point
@@ -105,8 +125,8 @@ nx.set_edge_attributes(G, weights_dict, 'weighted_cost') # Push scores back to t
 
 # ------------------------------ USER INPUT FOR START AND END POINTS ------------------------------
 
-start_input = st.text_input("Enter your starting point (e.g., 'Plaça de Catalunya, Barcelona'):", value="Parc Joan Miró, Barcelona")
-end_input = st.text_input("Enter your destination (e.g., 'Sagrada Família, Barcelona'):", value="Sagrada Família, Barcelona")
+start_input = st.sidebar.text_input("Enter your starting point (e.g., 'Plaça de Catalunya, Barcelona'):", placeholder="Parc Joan Miró, Barcelona")
+end_input = st.sidebar.text_input("Enter your destination (e.g., 'Sagrada Família, Barcelona'):", placeholder="Sagrada Família, Barcelona")
 
 if not start_input or not end_input:
     st.error("Please enter a starting point and a destination.")
@@ -129,63 +149,72 @@ if end_point is None:
     st.error("Couldn't geocode destination. Please check your input and try again.")
     st.stop()
 
-# ------------ ROUTE MAPPING AND VISUALISATION -------------
-if st.button("Find route"):
-    orig = ox.distance.nearest_nodes(G, X=start_point[1], Y=start_point[0])
-    dest = ox.distance.nearest_nodes(G, X=end_point[1], Y=end_point[0])
-
+# ------------ ROUTE MAPPING, VISUALISATION AND SUMMARY ------------- #Button block is separated to allow for faster iterations on routing. 
+if st.sidebar.button("Find route"): 
     with st.spinner("Calculating routes..."):
-        route_fast = ox.shortest_path(G, orig, dest, weight='length') #weight = which edges attribute to minimise
-        route_quiet = ox.shortest_path(G, orig, dest, weight='weighted_cost')
-        route_fast_edges = ox.routing.route_to_gdf(G, route_fast)
-        route_quiet_edges = ox.routing.route_to_gdf(G, route_quiet)
+        st.session_state.orig = ox.distance.nearest_nodes(G, X=start_point[1], Y=start_point[0])    
+        st.session_state.dest = ox.distance.nearest_nodes(G, X=end_point[1], Y=end_point[0])
+        st.session_state.route_fast = ox.shortest_path(G, st.session_state.orig, st.session_state.dest, weight='length')
+        st.session_state.route_fast_edges = ox.routing.route_to_gdf(G, st.session_state.route_fast)
+        
+
+if st.session_state.orig is not None:
+    route_quiet = ox.shortest_path(G, st.session_state.orig, st.session_state.dest, weight='weighted_cost')
+    route_quiet_edges = ox.routing.route_to_gdf(G, route_quiet)
+    
     
     #Finding which roads are in the quiet but not in the fast route.
     quiet_road_names = route_quiet_edges['name'].explode().unique().tolist()
-    fast_road_names = route_fast_edges['name'].explode().unique().tolist()
-    main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names] #List comprehension to find which roads are in the fast route but not in the quiet route.
+    fast_road_names = st.session_state.route_fast_edges['name'].explode().unique().tolist()
+    main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names and road is not None]
     
-    fast_noise = edges_projected.loc[route_fast_edges.index, 'noise_values'].mean().round() 
+    fast_noise = edges_projected.loc[st.session_state.route_fast_edges.index, 'noise_values'].mean().round() 
     quiet_noise = edges_projected.loc[route_quiet_edges.index, 'noise_values'].mean().round()
 
 
-    len_fast = route_fast_edges['length'].sum()
+    len_fast = st.session_state.route_fast_edges['length'].sum()
     len_quiet = route_quiet_edges['length'].sum()
 
     fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and could be improved by using more granular speed data based on road type, slope, etc.
     quiet_time = (len_quiet / 1000 * 12).round()
 
-    st.metric(label="Fast Route", value=f"{len_fast:.2f} meters. Estimated time: {fast_time} minutes")
-    st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet:.2f} meters. Estimated time: {quiet_time} minutes.")
-    
-    st.write(fast_noise)
-    st.write(quiet_noise)
-
-    user_prompt = f"""Fast route time: {fast_time} mins. Quiet route time: {quiet_time} mins.
-        Average noise on fast route: {fast_noise} dB.
-        Average noise on quiet route: {quiet_noise} dB.
-        Main roads avoided: {', '.join(main_roads_avoided[:3])}."""
-    
-    response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=1024,
-        system=f"""You are a helpful walking assistant that provides a concise summary of the features of a quietness-optimised route through barcelona, 
-        in contrast to the fastest route. The user has chosen {k_label} as their mode. 
-        Focus on the noise levels, roads avoided, and time difference in your summary. 
-        Note that decibels are logarithmic — their increase and decrease is not linear, so even a small difference in dB can have a significant impact on perceived noise.
-        Avoid giving specific percentages and instead use qualitative language like "noticeably quieter" or "significantly reduced".
-        Reflect this in your summary so the user understands the real impact of the noise difference.
-        2 sentences maximum.""",
-        messages=[
-        {"role": "user", "content": user_prompt}
-    ]
-    )
-
-    st.write(response.content[0].text)
-    
-
-    #Plotting routes using OSMNX's built-in plotting function, with custom colours and line widths for better visibility. Nodes are hidden for a cleaner look.
-    fig, ax = ox.plot_graph_routes(G, [route_fast, route_quiet], 
+    st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km. Estimated time: {int(fast_time)} minutes")
+    st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet/1000:.1f} km. Estimated time: {int(quiet_time)} minutes.")
+ 
+# -------------- Plotting routes using OSMNX's built-in plotting function ------------------
+    fig, ax = ox.plot_graph_routes(G, [st.session_state.route_fast, route_quiet], 
                                 route_colors=['r', 'g'], 
                                 route_linewidth=4, node_size=0)
     st.pyplot(fig)
+
+    if st.session_state.last_k_label != k_label or st.session_state.last_route != route_quiet: #Only call the LLM if the user has changed their preference or the quiet route. 
+        # calling LLM for summary
+        user_prompt = f"""Fast route time: {fast_time} mins. Quiet route time: {quiet_time} mins.
+            Average noise on fast route: {fast_noise} dB.
+            Average noise on quiet route: {quiet_noise} dB.
+            Main roads avoided: {', '.join(main_roads_avoided[:3])}.""" #Limiting to 3 main roads avoided for brevity. 
+        
+        response = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=1024,
+            system=f"""You are a helpful walking assistant that provides a concise summary of the features of a quietness-optimised route through barcelona, 
+            in contrast to the fastest route. The user has chosen {k_label} as their mode. 
+            Focus on the noise levels, roads avoided, and time difference in your summary. 
+            Note that decibels are logarithmic — their increase and decrease is not linear: 
+            Even a small difference in dB can have a significant impact on perceived noise. 
+            If the difference between fast and quiet route noise is less than 2dB, 
+            note that this area of Barcelona is uniformly loud and even the quietest available route has limited noise reduction.
+            Avoid giving specific percentages and instead use qualitative language like "noticeably quieter" or "significantly reduced".
+            Reflect this in your summary so the user understands the real impact of the noise difference.
+            2 sentences maximum.""",
+            messages=[
+            {"role": "user", "content": user_prompt}
+        ]
+        )
+        st.session_state.summary = response.content[0].text
+        st.session_state.last_k_label = k_label
+        st.session_state.last_route = route_quiet
+    st.write(st.session_state.summary)
+
+
+   
