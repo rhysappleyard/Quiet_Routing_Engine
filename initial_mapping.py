@@ -42,7 +42,6 @@ start_input = st.sidebar.text_input("Enter your starting point (e.g., 'Plaça de
 end_input = st.sidebar.text_input("Enter your destination (e.g., 'Sagrada Família, Barcelona'):", placeholder="Sagrada Família, Barcelona")
 
 
-bbox = ("north", "south", "east", "west")
 @st.cache_data
 def load_graph(bbox):
     G = ox.graph_from_bbox(bbox, network_type="walk")
@@ -163,6 +162,9 @@ if st.sidebar.button("Find route"):
 
         st.info("Loading graph data for the specified area...")#Better UX
         bbox = (north, south, east, west)
+        st.write(f"bbox: {north:.4f}, {south:.4f}, {east:.4f}, {west:.4f}")
+        st.write(f"Width: {(east-west)*111:.1f}km, Height: {(north-south)*111:.1f}km")
+        
         G, edges = load_graph(bbox) #Reloading graph with a bounding box that encompasses the start and end points, to speed up routing calculations. This is cached to speed up subsequent runs with the same bounding box.
         st.session_state.G = G
         st.session_state.edges = edges
