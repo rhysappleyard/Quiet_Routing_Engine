@@ -43,8 +43,8 @@ end_input = st.sidebar.text_input("Enter your destination (e.g., 'Sagrada Famíl
 
 
 @st.cache_data
-def load_graph(bbox):
-    G = ox.graph_from_bbox(bbox, network_type="walk")
+def load_graph(address, dist):
+    G = ox.graph_from_address(address, dist=dist, network_type="walk", simplify=True)
     _, edges = ox.graph_to_gdfs(G) #leaving nodes blank (hence the underscore) as we are working with roads, not intersections.
     return G, edges
 
@@ -154,18 +154,17 @@ if st.sidebar.button("Find route"):
             st.error("Couldn't geocode destination. Please check your input and try again.")
             st.stop()
 
-        
-        north = max(start_point[0], end_point[0]) + 0.005 #0.005 degrees is roughly 500m, allowing for ample expansion of the map for longer routes. 
-        south = min(start_point[0], end_point[0]) - 0.005
-        east = max(start_point[1], end_point[1]) + 0.005
-        west = min(start_point[1], end_point[1]) - 0.005
 
         st.info("Loading graph data for the specified area...")#Better UX
-        bbox = (north, south, east, west)
-        st.write(f"bbox: {north:.4f}, {south:.4f}, {east:.4f}, {west:.4f}")
-        st.write(f"Width: {(east-west)*111:.1f}km, Height: {(north-south)*111:.1f}km")
+        mid_lat = (start_point[0] + end_point[0]) / 2
+        mid_lon = (start_point[1] + end_point[1]) / 2
+        distance = ox.distance.great_circle(start_point[0], start_point[1], end_point[0], end_point[1])
+        G, edges = load_graph(f"{mid_lat},{mid_lon}", dist=int(distance/2) + 500)
         
-        G, edges = load_graph(bbox) #Reloading graph with a bounding box that encompasses the start and end points, to speed up routing calculations. This is cached to speed up subsequent runs with the same bounding box.
+
+        
+        
+
         st.session_state.G = G
         st.session_state.edges = edges
         st.session_state.noise_normalised, st.session_state.edges_projected = map_data_join(edges, gpkg_path, noise_column) #Joining normalised noise data to the edges
