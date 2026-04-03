@@ -90,7 +90,9 @@ k = mapping[k_label]
 # ------------- Joining the GeoPackage noise data with the OSMNX data -------------
 @st.cache_data
 def map_data_join(_edges, gpkg_path, noise_column):     #Have put "_edges" so that it doesn't cache edges. 
-    noise_gdf = gpd.read_file(gpkg_path, layer='2017_Tramer_Mapa_Estrategic_Soroll_BCN')  
+    bbox = _edges.total_bounds
+    noise_gdf = gpd.read_file(gpkg_path, layer='2017_Tramer_Mapa_Estrategic_Soroll_BCN', bbox=bbox) #Reading only the relevant subset of noise data based on the bounding box of the graph edges, to save memory and speed up processing.
+    
 
     # Coordinate Reference System (CRS) Alignment (Degrees vs Meters in different maps (OpenData BCN vs. OSMNX) need to be homogenised)
     noise_gdf = noise_gdf.to_crs(_edges.crs)
@@ -163,6 +165,8 @@ if st.sidebar.button("Find route"):
         st.session_state.mid_lon = (start_point[1] + end_point[1]) / 2
 
         distance = ox.distance.great_circle(start_point[0], start_point[1], end_point[0], end_point[1])
+
+        st.write(f"Distance: {distance:.0f}m, Graph dist: {int(distance/2)+500}m")
         G, edges = load_graph(f"{st.session_state.mid_lat},{st.session_state.mid_lon}", dist=int(distance/2) + 500)
         
 
