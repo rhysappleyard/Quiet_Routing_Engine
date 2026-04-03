@@ -14,6 +14,30 @@ ox.settings.use_cache = True
 ox.settings.requests_timeout = 300
 client = anthropic.Anthropic()
 
+
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    html, body, [class*="css"], .stMarkdown {
+        font-family: 'Share Tech Mono', monospace;
+    }
+    
+    /* Make headers look like terminal prompts */
+    h1::before {
+        content: "> ";
+        color: #00FF41;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+
+
+
 # ------------------------ Streamlit Session State Initialisation ------------------------
 def init_session_state():#Turned into a function as had too many variables to initialise. 
     defaults = {
