@@ -90,7 +90,7 @@ k = mapping[k_label]
 # ------------- Joining the GeoPackage noise data with the OSMNX data -------------
 @st.cache_data
 def map_data_join(_edges, gpkg_path, noise_column):     #Have put "_edges" so that it doesn't cache edges. 
-    bbox = _edges.total_bounds
+    bbox = tuple(_edges.total_bounds)
     noise_gdf = gpd.read_file(gpkg_path, layer='2017_Tramer_Mapa_Estrategic_Soroll_BCN', bbox=bbox) #Reading only the relevant subset of noise data based on the bounding box of the graph edges, to save memory and speed up processing.
     
 
