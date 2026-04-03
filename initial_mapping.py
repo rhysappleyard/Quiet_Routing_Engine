@@ -179,10 +179,8 @@ if st.session_state.orig is not None:
     route_quiet = ox.shortest_path(st.session_state.G, st.session_state.orig, st.session_state.dest, weight='weighted_cost')
     route_quiet_edges = ox.routing.route_to_gdf(st.session_state.G, route_quiet)
 
-    route_fast_gdf = ox.routing.route_to_gdf(st.session_state.G, st.session_state.route_fast).to_crs("EPSG:4326") #Folium needs lat/lon coordinates, so we convert the CRS back to EPSG:4326 -
-    route_quiet_gdf = ox.routing.route_to_gdf(st.session_state.G, route_quiet).to_crs("EPSG:4326")                #for both routes to ensure they are in the same format for plotting.
-
-
+    route_fast_gdf = st.session_state.route_fast_edges.to_crs("EPSG:4326")
+    route_quiet_gdf = route_quiet_edges.to_crs("EPSG:4326")
     
     #Finding which roads are in the quiet but not in the fast route.
     quiet_road_names = route_quiet_edges['name'].explode().unique().tolist()
@@ -219,7 +217,7 @@ if st.session_state.orig is not None:
             Focus on the noise levels, roads avoided, and time difference in your summary. 
             Note that decibels are logarithmic — their increase and decrease is not linear: 
             Even a small difference in dB can have a significant impact on perceived noise. 
-            If {k_label} is "Serene" and the difference between fast and quiet route noise is less than 2dB, 
+            If and only if {k_label} is "Serene" and the difference between fast and quiet route noise is less than 2dB, 
             note that this area of Barcelona is uniformly loud and even the quietest available route has limited noise reduction.
             Avoid giving specific percentages and instead use qualitative language like "noticeably quieter" or "significantly reduced".
             Reflect this in your summary so the user understands the real impact of the noise difference.
@@ -236,7 +234,6 @@ if st.session_state.orig is not None:
 # -------------- Plotting routes using Folium for interactive map ------------------
    
     m = folium.Map(location=[st.session_state.mid_lat, st.session_state.mid_lon], zoom_start=15, tiles="cartodbpositron")
-    m.fit_bounds(route_quiet_gdf.total_bounds[[1,0,3,2]].tolist()) #fit map to bounds of route. Reordered indices because of how fit_bounds expects them (southwest, northeast) and how total_bounds outputs them (minx, miny, maxx, maxy).
     folium.GeoJson(route_fast_gdf, name="Fast Route", style_function=lambda x: {'color': 'red', 'weight': 4, 'opacity': 0.7}).add_to(m)
     folium.GeoJson(route_quiet_gdf, name="Quiet Route", style_function=lambda x: {'color': 'green', 'weight': 5, 'opacity': 0.9}).add_to(m)
     folium.LayerControl().add_to(m)
