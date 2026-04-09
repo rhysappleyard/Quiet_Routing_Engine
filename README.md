@@ -16,7 +16,7 @@ Live demo available at quietroutingengine.streamlit.app
 Note this is currently a work in progress, and there are caching issues which I'm solving. 
 
 ## Methodology 
-"Noise penalties are applied exponentially via a tunable parameter k, reflecting the logarithmic nature of decibel perception."
+Noise penalties are applied exponentially via a tunable parameter k, reflecting the logarithmic nature of decibel perception.
 
 
 
