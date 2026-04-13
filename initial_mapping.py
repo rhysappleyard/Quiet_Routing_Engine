@@ -145,11 +145,7 @@ def map_data_join(_edges, gpkg_path, noise_column):     #Have put "_edges" so th
 
 # ---------------------- Applying Noise Constraints to the Edges --------------------
 
-if st.session_state.noise_normalised is not None:
-    penalty = ((1 + st.session_state.noise_normalised) ** k) - 1
-    weighted_costs = st.session_state.edges['length'] * (1 + penalty) #Applying the noise constraints to the edges, with the selected k value.
-    nx.set_edge_attributes(st.session_state.G, weighted_costs.todict(), 'weighted_costs') # Push scores back to the graph
-    st.session_state.edges['weighted_costs'] = weighted_costs #Converting back to a Series of values to push back to the graph. 
+
 
 
 # ------------ ROUTE MAPPING, VISUALISATION AND SUMMARY ------------- #Button block is separated to allow for faster iterations on routing. 
@@ -196,6 +192,14 @@ if st.sidebar.button("Find route"):
         st.session_state.route_fast_edges = ox.routing.route_to_gdf(st.session_state.G, st.session_state.route_fast)
 
 if st.session_state.orig is not None:
+
+    if st.session_state.noise_normalised is not None:
+        penalty = ((1 + st.session_state.noise_normalised) ** k) - 1
+        weighted_costs = st.session_state.edges['length'] * (1 + penalty) #Applying the noise constraints to the edges, with the selected k value.
+        nx.set_edge_attributes(st.session_state.G, weighted_costs.todict(), 'weighted_costs') # Push scores back to the graph
+        st.session_state.edges['weighted_costs'] = weighted_costs #Converting back to a Series of values to push back to the graph. 
+
+        
     route_quiet = ox.shortest_path(st.session_state.G, st.session_state.orig, st.session_state.dest, weight='weighted_costs')
     route_quiet_edges = ox.routing.route_to_gdf(st.session_state.G, route_quiet)
 
