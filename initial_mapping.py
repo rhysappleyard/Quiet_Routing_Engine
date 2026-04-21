@@ -251,7 +251,11 @@ if st.session_state.orig is not None:
     main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names and road is not None and isinstance(road, str)] #Some roads have no names.
     
     fast_noise = st.session_state.edges_with_noise.loc[st.session_state.route_fast_edges.index, 'noise_values'].mean().round() 
+    mask = st.session_state.edges_with_noise.index.isin(st.session_state.route_fast_edges.index)
+    fast_noise = st.session_state.edges_with_noise.loc[mask, 'noise_values'].mean().round()
     quiet_noise = st.session_state.edges_with_noise.loc[route_quiet_edges.index, 'noise_values'].mean().round()
+    mask = st.session_state.edges_with_noise.index.isin(route_quiet_edges.index)
+    quiet_noise = st.session_state.edges_with_noise.loc[mask, 'noise_values'].mean().round()
 
 
     len_fast = st.session_state.route_fast_edges['length'].sum()
