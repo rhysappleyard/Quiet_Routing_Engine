@@ -37,6 +37,23 @@ st.markdown(
 
 
 
+def clean_location_input(raw_text):
+    response = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=50
+            system="""You must clean and standardise user input for geocoding.
+            The user will input a location in Barcelona, but they may use different formats, abbreviations, or include extra information.
+            Extract only the relevant location information and standardise it for geocoding.
+            For example, if the user inputs "Parc Joan Miró, Barcelona", you should return "Parc Joan Miró, Barcelona". 
+            If they input "Joan Miró Park near Plaça Espanya", you should return "Parc Joan Miró, Barcelona". 
+            If they input "Plaça de Catalunya", you should return "Plaça de Catalunya, Barcelona".
+            Return only the place name, no explanation, no punctuation other than commas, nothing else."
+            If and only if the input is not a recognisable location for Barcelona, return only the word INVALID and nothing else.
+            """
+            messages
+
+
+
 
 # ------------------------ Streamlit Session State Initialisation ------------------------
 def init_session_state():#Turned into a function as had too many variables to initialise. 
@@ -123,9 +140,6 @@ def map_data_join(_edges, gpkg_path, noise_column):     #Have put "_edges" so th
     # Coordinate Reference System (CRS) Alignment (Degrees vs Meters in different maps (OpenData BCN vs. OSMNX) need to be homogenised)
     noise_gdf = noise_gdf.to_crs(_edges.crs)
     
-
-    
-    
     noise_projected = noise_gdf.to_crs(bcn_crs)
     
     # Spatial Join (Snapping closest noise data to the streets)
@@ -137,17 +151,18 @@ def map_data_join(_edges, gpkg_path, noise_column):     #Have put "_edges" so th
     )
 
     joined = joined[~joined.index.duplicated(keep='first')] 
-    
 
+    
     # Converting column to floats as they're stored as strings in the GeoPackage. Added regex to find upper bound of noise range, and take only two digits.
     noise_values = pd.to_numeric(joined[noise_column].str.extract(r"- (\d+)")[0], errors='coerce').fillna(75) # Assuming 75 dB for streets without noise data, which is a conservative estimate to avoid false positives.
     
-    edges_with_noise = _edges.copy()#Creating a copy of the original edges GeoDataFrame to avoid modifying it directly, which can cause issues with caching and data integrity in Streamlit.
+    print(len(noise_values), len(_edges))
+
+    edges_with_noise = _edges.copy()#Creating copy of the original edges GeoDataFrame to avoid modifying it directly, which can cause issues with caching and data integrity in Streamlit.
     edges_with_noise['noise_values'] = noise_values
     noise_normalised = (noise_values - noise_values.min()) / (noise_values.max() - noise_values.min()) # Normalising values between 0 and 1. 
+    noise_normalised = noise_normalised.clip(0, 1) #Ensuring normalisation doesn't produce outliers. 
 
-
-    st.write(st.session_state.edges['length'].describe())
     return noise_normalised, noise_values, edges_with_noise
 
 
@@ -178,7 +193,7 @@ if st.sidebar.button("Find route"):
             st.stop()
 
 
-        st.info("Loading graph data for the specified area...")#Better UX
+        st.info("Loading graph data for the specified area...")
         st.session_state.mid_lat = (start_point[0] + end_point[0]) / 2
         st.session_state.mid_lon = (start_point[1] + end_point[1]) / 2
 
@@ -186,22 +201,27 @@ if st.sidebar.button("Find route"):
 
         st.write(f"Distance: {distance:.0f}m, Graph dist: {int(distance/2)+500}m")
         G, edges = load_graph(f"{st.session_state.mid_lat},{st.session_state.mid_lon}", dist=int(distance/2) + 500)
+
+        
         
 
         st.session_state.G = G
         st.session_state.edges = edges
         st.session_state.noise_normalised, noise_values, st.session_state.edges_with_noise = map_data_join(edges, gpkg_path, noise_column) #Joining normalised noise data to the edges
-        st.write(st.session_state.edges_with_noise['noise_values'].value_counts())
         st.session_state.orig = ox.distance.nearest_nodes(st.session_state.G, X=start_point[1], Y=start_point[0])    
         st.session_state.dest = ox.distance.nearest_nodes(st.session_state.G, X=end_point[1], Y=end_point[0])
         st.session_state.route_fast = ox.shortest_path(st.session_state.G, st.session_state.orig, st.session_state.dest, weight='length')
         st.session_state.route_fast_edges = ox.routing.route_to_gdf(st.session_state.G, st.session_state.route_fast)
+
+
+    
 
 if st.session_state.orig is not None:
 
     if st.session_state.noise_normalised is not None:
         penalty = ((1 + st.session_state.noise_normalised) ** k) - 1
         weighted_costs = st.session_state.edges['length'] * (1 + penalty) #Applying the noise constraints to the edges, with the selected k value.
+        weighted_costs = weighted_costs.fillna(1e-6).clip(lower=1e-6) # Avoiding NaN, zero or negative weights which can mess with Dijkstra's algorithm. 
         nx.set_edge_attributes(st.session_state.G, weighted_costs.to_dict(), 'weighted_costs') # Push scores back to the graph
         st.session_state.edges['weighted_costs'] = weighted_costs #Converting back to a Series of values to push back to the graph. 
 
