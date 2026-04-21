@@ -40,18 +40,23 @@ st.markdown(
 def clean_location_input(raw_text):
     response = client.messages.create(
             model="claude-sonnet-4-5",
-            max_tokens=50
+            max_tokens=50,
             system="""You must clean and standardise user input for geocoding.
             The user will input a location in Barcelona, but they may use different formats, abbreviations, or include extra information.
             Extract only the relevant location information and standardise it for geocoding.
             For example, if the user inputs "Parc Joan Miró, Barcelona", you should return "Parc Joan Miró, Barcelona". 
             If they input "Joan Miró Park near Plaça Espanya", you should return "Parc Joan Miró, Barcelona". 
             If they input "Plaça de Catalunya", you should return "Plaça de Catalunya, Barcelona".
-            Return only the place name, no explanation, no punctuation other than commas, nothing else."
+            Return only the place name, no explanation, no punctuation other than commas, nothing else.
             If and only if the input is not a recognisable location for Barcelona, return only the word INVALID and nothing else.
-            """
-            messages
+            """,
+            messages = [{"role": "user", "content": raw_text}])
 
+    clean_text = response.content[0].text.strip()
+    if clean_text == "INVALID":
+        return None
+    else: 
+        return clean_text
 
 
 
@@ -175,16 +180,24 @@ if st.sidebar.button("Find route"):
         if not start_input or not end_input:
             st.error("Please enter a starting point and a destination.")
             st.stop() #Stop the app if either input is missing, to avoid errors in geocoding.
+        clean_start_input = clean_location_input(start_input)
+        if clean_start_input is None:
+            st.error("Couldn't understand starting point. Please check your input and try again.")
+            st.stop()
         try: 
-            start_point = ox.geocoder.geocode(start_input)
+            start_point = ox.geocoder.geocode(clean_start_input)
         except Exception as e:
             st.error(f"Couldn't geocode starting point: {e}")
             st.stop()
         if start_point is None:
             st.error("Couldn't geocode starting point. Please check your input and try again.")
             st.stop()
+        clean_end_input = clean_location_input(end_input)
+        if clean_end_input is None:
+            st.error("Couldn't understand destination. Please check your input and try again.")
+            st.stop()
         try:
-            end_point = ox.geocoder.geocode(end_input)
+            end_point = ox.geocoder.geocode(clean_end_input)
         except Exception as e:
             st.error(f"Couldn't geocode destination: {e}")
             st.stop()
