@@ -160,8 +160,7 @@ def map_data_join(_edges, gpkg_path, noise_column):     #Have put "_edges" so th
     
     # Converting column to floats as they're stored as strings in the GeoPackage. Added regex to find upper bound of noise range, and take only two digits.
     noise_values = pd.to_numeric(joined[noise_column].str.extract(r"- (\d+)")[0], errors='coerce').fillna(75) # Assuming 75 dB for streets without noise data, which is a conservative estimate to avoid false positives.
-    
-    print(len(noise_values), len(_edges))
+
 
     edges_with_noise = _edges.copy()#Creating copy of the original edges GeoDataFrame to avoid modifying it directly, which can cause issues with caching and data integrity in Streamlit.
     edges_with_noise['noise_values'] = noise_values
