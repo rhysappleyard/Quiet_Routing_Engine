@@ -39,7 +39,7 @@ st.markdown(
 
 def clean_location_input(raw_text):
     response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=50,
             system="""You must clean and standardise user input for geocoding.
             The user will input a location in Barcelona, but they may use different formats, abbreviations, or include extra information.
@@ -248,10 +248,10 @@ if st.session_state.orig is not None:
     fast_road_names = st.session_state.route_fast_edges['name'].explode().unique().tolist()
     main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names and road is not None and isinstance(road, str)] #Some roads have no names.
     
-    fast_noise = st.session_state.edges_with_noise.loc[st.session_state.route_fast_edges.index, 'noise_values'].mean().round() 
+  
     mask = st.session_state.edges_with_noise.index.isin(st.session_state.route_fast_edges.index)
     fast_noise = st.session_state.edges_with_noise.loc[mask, 'noise_values'].mean().round()
-    quiet_noise = st.session_state.edges_with_noise.loc[route_quiet_edges.index, 'noise_values'].mean().round()
+
     mask = st.session_state.edges_with_noise.index.isin(route_quiet_edges.index)
     quiet_noise = st.session_state.edges_with_noise.loc[mask, 'noise_values'].mean().round()
 
@@ -275,7 +275,7 @@ if st.session_state.orig is not None:
             Main roads avoided: {', '.join(main_roads_avoided[:3])}.""" #Limiting to 3 main roads avoided for brevity. 
         
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=1024,
             system=f"""You are a helpful walking assistant that provides a concise summary of the features of a quietness-optimised route through Barcelona, 
             in contrast to the fastest route. The user has chosen {k_label} as their mode. 
@@ -304,7 +304,3 @@ if st.session_state.orig is not None:
     folium.LayerControl().add_to(m)
     st_folium(m, width=700, height=500, returned_objects=[]) #returned objects means we don't have to process user interactions with the map. 
 
-    
-
-
-   
