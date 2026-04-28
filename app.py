@@ -41,8 +41,6 @@ def init_session_state():#Turned into a function as had too many variables to in
         'edges': None,
         'noise_normalised': None,
         'route_fast_edges': None,
-        'mid_lat': 41.3851, # Default to Barcelona center
-        'mid_lon': 2.1734, # Default to Barcelona center
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -54,22 +52,23 @@ MAP_CRS = "EPSG:4326"  #and then convert back to WGS84 (EPSG:4326) for mapping a
 
 
 
-@st.cache_data
-def load_graph(address, dist):
-    G = ox.graph_from_address(address, dist=dist, network_type="walk", simplify=True)
-    _, edges = ox.graph_to_gdfs(G) #leaving nodes blank (hence the underscore) as we are working with roads, not intersections.
+@st.cache_resource
+def load_graph():
+    # Load the local GraphML file for Barcelona.
+    G = ox.load_graphml("data/barcelona_walk.graphml") 
+    # Convert to GeoDataFrame once and cache
+    _, edges = ox.graph_to_gdfs(G)
     return G, edges
 
+G_GLOBAL, EDGES_GLOBAL = load_graph() #Loading the graph globally to avoid repeated loading during development.
 
 noise_column = get_noise_column() 
 
 @st.cache_data
 def load_preprocessed():
-    return gpd.read_parquet("edges_preprocessed.parquet")
+    return gpd.read_parquet("data/edges_preprocessed.parquet")
 
 edges_preprocessed = load_preprocessed()
-
-
 
 start_input = st.sidebar.text_input("Enter your starting point (e.g., 'Plaça de Catalunya, Barcelona'):", placeholder="Parc Joan Miró, Barcelona")
 end_input = st.sidebar.text_input("Enter your destination (e.g., 'Sagrada Família, Barcelona'):", placeholder="Sagrada Família, Barcelona")
@@ -89,12 +88,14 @@ mapping = {
 k = mapping[k_label]
 
 
-
-
-
 # ------------ ROUTE MAPPING, VISUALISATION AND SUMMARY ------------- #Button block is separated to allow for faster iterations on routing. 
+
+
 if st.sidebar.button("Find route"): 
-    with st.spinner("Calculating routes..."):
+
+    progress_bar = st.progress(0)
+    with st.status("Analysing Barcelona noise levels...", expanded=True) as status:
+        st.write("Geocoding locations...")
         if not start_input or not end_input:
             st.error("Please enter a starting point and a destination.")
             st.stop() #Stop the app if either input is missing, to avoid errors in geocoding.
@@ -122,74 +123,70 @@ if st.sidebar.button("Find route"):
         if end_point is None:
             st.error("Couldn't geocode destination. Please check your input and try again.")
             st.stop()
+        progress_bar.progress(20)
 
 
-        st.info("Loading graph data for the specified area...")
-        st.session_state.mid_lat = (start_point[0] + end_point[0]) / 2
-        st.session_state.mid_lon = (start_point[1] + end_point[1]) / 2
+    
 
-        distance = ox.distance.great_circle(start_point[0], start_point[1], end_point[0], end_point[1])
+        st.session_state.G = G_GLOBAL
+        st.session_state.edges = EDGES_GLOBAL
 
-        G, edges = load_graph(f"{st.session_state.mid_lat},{st.session_state.mid_lon}", dist=int(distance/2) + 500)
 
-        mask = edges_preprocessed.index.isin(edges.index)
-        noise_normalised = normalise(edges_preprocessed.loc[mask, noise_column]).reindex(edges.index)
+        mask = edges_preprocessed.index.isin(EDGES_GLOBAL.index)
+        noise_normalised = normalise(edges_preprocessed.loc[mask, noise_column]).reindex(EDGES_GLOBAL.index)
         
 
-        st.session_state.G = G
-        st.session_state.edges = edges
         st.session_state.noise_normalised = noise_normalised
         st.session_state.orig = ox.distance.nearest_nodes(st.session_state.G, X=start_point[1], Y=start_point[0])    
         st.session_state.dest = ox.distance.nearest_nodes(st.session_state.G, X=end_point[1], Y=end_point[0])
         st.session_state.route_fast = ox.shortest_path(st.session_state.G, st.session_state.orig, st.session_state.dest, weight='length')
         st.session_state.route_fast_edges = ox.routing.route_to_gdf(st.session_state.G, st.session_state.route_fast)
 
-
-
-
-
+        status.update(label="Locations Found", state="complete", expanded=False)
+        progress_bar.progress(40)
 
 
 
 if st.session_state.orig is not None:
+    with st.spinner("Applying noise penalties to roads..."):
 
-    if st.session_state.noise_normalised is not None:
-        weighted_costs = apply_penalty(st.session_state.edges, k, st.session_state.noise_normalised)
-        st.session_state.weighted_costs = weighted_costs
-    else:
-        st.error("Noise data not available. Cannot calculate quiet route.")
-        st.stop()   
+        if st.session_state.noise_normalised is not None:
+            weighted_costs = apply_penalty(st.session_state.edges, k, st.session_state.noise_normalised)
+            st.session_state.weighted_costs = weighted_costs
+        else:
+            st.error("Noise data not available. Cannot calculate quiet route.")
+            st.stop()   
+        
+        route_quiet = find_quiet_route(st.session_state.G, st.session_state.orig, st.session_state.dest, weighted_costs)
+        route_quiet_edges = ox.routing.route_to_gdf(st.session_state.G, route_quiet)
 
-    route_quiet = find_quiet_route(st.session_state.G, st.session_state.orig, st.session_state.dest, weighted_costs)
-    route_quiet_edges = ox.routing.route_to_gdf(st.session_state.G, route_quiet)
+        route_fast_gdf = st.session_state.route_fast_edges.to_crs(MAP_CRS)
+        route_quiet_gdf = route_quiet_edges.to_crs(MAP_CRS)
+        
+        progress_bar.progress(60)
+        #Finding which roads are in the quiet but not in the fast route.
+        quiet_road_names = route_quiet_edges['name'].explode().unique().tolist()
+        fast_road_names = st.session_state.route_fast_edges['name'].explode().unique().tolist()
+        main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names and road is not None and isinstance(road, str)] #Some roads have no names.
+        
+        mask = edges_preprocessed.index.isin(st.session_state.route_fast_edges.index)
+        fast_noise = edges_preprocessed.loc[mask, noise_column].mean().round()
 
-    route_fast_gdf = st.session_state.route_fast_edges.to_crs(MAP_CRS)
-    route_quiet_gdf = route_quiet_edges.to_crs(MAP_CRS)
+        mask = edges_preprocessed.index.isin(route_quiet_edges.index)
+        quiet_noise = edges_preprocessed.loc[mask, noise_column].mean().round()
+
+
+        len_fast = st.session_state.route_fast_edges['length'].sum()
+        len_quiet = route_quiet_edges['length'].sum()
+
+        fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and could be improved by using more granular speed data based on road type, slope, etc.
+        quiet_time = (len_quiet / 1000 * 12).round()
+
+        st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km. Estimated time: {int(fast_time)} minutes")
+        st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet/1000:.1f} km. Estimated time: {int(quiet_time)} minutes.")
+        
+        
     
-    #Finding which roads are in the quiet but not in the fast route.
-    quiet_road_names = route_quiet_edges['name'].explode().unique().tolist()
-    fast_road_names = st.session_state.route_fast_edges['name'].explode().unique().tolist()
-    main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names and road is not None and isinstance(road, str)] #Some roads have no names.
-    
-  
-    mask = edges_preprocessed.index.isin(st.session_state.route_fast_edges.index)
-    fast_noise = edges_preprocessed.loc[mask, noise_column].mean().round()
-
-    mask = edges_preprocessed.index.isin(route_quiet_edges.index)
-    quiet_noise = edges_preprocessed.loc[mask, noise_column].mean().round()
-
-
-    len_fast = st.session_state.route_fast_edges['length'].sum()
-    len_quiet = route_quiet_edges['length'].sum()
-
-    fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and could be improved by using more granular speed data based on road type, slope, etc.
-    quiet_time = (len_quiet / 1000 * 12).round()
-
-    st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km. Estimated time: {int(fast_time)} minutes")
-    st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet/1000:.1f} km. Estimated time: {int(quiet_time)} minutes.")
-
-
-
 
 
 
@@ -202,14 +199,17 @@ if st.session_state.orig is not None:
         st.session_state.last_k_label = k_label
         st.session_state.last_route = route_quiet
     st.write(st.session_state.summary)
-
+    progress_bar.progress(80)
 
 
 
 # -------------- Plotting routes using Folium for interactive map ------------------
    
-    m = folium.Map(location=[st.session_state.mid_lat, st.session_state.mid_lon], zoom_start=15, tiles="cartodbpositron")
+    m = folium.Map(location=[41.3874, 2.1686], zoom_start=15, tiles="cartodbpositron")
     folium.GeoJson(route_fast_gdf, name="Fast Route", style_function=lambda x: {'color': 'red', 'weight': 4, 'opacity': 0.7}).add_to(m)
     folium.GeoJson(route_quiet_gdf, name="Quiet Route", style_function=lambda x: {'color': 'green', 'weight': 5, 'opacity': 0.9}).add_to(m)
     folium.LayerControl().add_to(m)
     st_folium(m, width=700, height=500, returned_objects=[]) #returned objects means we don't have to process user interactions with the map. 
+
+    progress_bar.progress(100)
+    progress_bar.empty()

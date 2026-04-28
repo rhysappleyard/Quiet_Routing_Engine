@@ -205,7 +205,7 @@ if st.sidebar.button("Find route"):
             st.stop()
 
 
-        st.info("Loading graph data for the specified area...")
+        st.status("Loading graph data for the specified area...")
         st.session_state.mid_lat = (start_point[0] + end_point[0]) / 2
         st.session_state.mid_lon = (start_point[1] + end_point[1]) / 2
 
