@@ -1,0 +1,216 @@
+from routing import get_noise_column, apply_penalty, normalise, find_quiet_route
+from llm import clean_location_input, generate_route_summary
+import geopandas as gpd
+import streamlit as st
+import osmnx as ox
+import networkx as nx
+import folium
+from streamlit_folium import st_folium
+
+
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+    html, body, [class*="css"], .stMarkdown {
+        font-family: 'Share Tech Mono', monospace;
+    }
+    
+    /* Make headers look like terminal prompts */
+    h1::before {
+        content: "> ";
+        color: #00FF41;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+ox.settings.use_cache = False #Turning off caching in OSMNX to avoid issues with stale data during development. In a production environment, this should be turned on for performance.
+
+# ------------------------ Streamlit Session State Initialisation ------------------------
+def init_session_state():#Turned into a function as had too many variables to initialise. 
+    defaults = {
+        'route_fast': None,
+        'orig': None,
+        'dest': None,
+        'last_k_label': None,
+        'summary': None,
+        'last_route': None,
+        'G': None,
+        'edges': None,
+        'noise_normalised': None,
+        'route_fast_edges': None,
+        'mid_lat': 41.3851, # Default to Barcelona center
+        'mid_lon': 2.1734, # Default to Barcelona center
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+init_session_state()
+
+BCN_CRS = "EPSG:25831" #Setting Coordinate Reference System for Barcelona, which is used in the noise data. OSM edges are converted to BCN_CRS for the spatial join, 
+MAP_CRS = "EPSG:4326"  #and then convert back to WGS84 (EPSG:4326) for mapping and routing.
+
+
+
+@st.cache_data
+def load_graph(address, dist):
+    G = ox.graph_from_address(address, dist=dist, network_type="walk", simplify=True)
+    _, edges = ox.graph_to_gdfs(G) #leaving nodes blank (hence the underscore) as we are working with roads, not intersections.
+    return G, edges
+
+
+noise_column = get_noise_column() 
+
+@st.cache_data
+def load_preprocessed():
+    return gpd.read_parquet("edges_preprocessed.parquet")
+
+edges_preprocessed = load_preprocessed()
+
+
+
+start_input = st.sidebar.text_input("Enter your starting point (e.g., 'Plaça de Catalunya, Barcelona'):", placeholder="Parc Joan Miró, Barcelona")
+end_input = st.sidebar.text_input("Enter your destination (e.g., 'Sagrada Família, Barcelona'):", placeholder="Sagrada Família, Barcelona")
+
+# -------------------- STREAMLIT SLIDER FOR NOISE SENSITIVITY (k) --------------------
+k_label = st.sidebar.select_slider(    #Tuning parameter to adjust influence of noise on the overall cost. 
+        'Walking preference',
+        options=['Efficient', 'Balanced', 'Quiet', 'Serene'],
+        value='Balanced'    #Hardcoded starting point
+    )
+mapping = {
+        'Efficient': 0.5,
+        'Balanced': 1.5,
+        'Quiet': 3,
+        'Serene': 5
+    }
+k = mapping[k_label]
+
+
+
+
+
+# ------------ ROUTE MAPPING, VISUALISATION AND SUMMARY ------------- #Button block is separated to allow for faster iterations on routing. 
+if st.sidebar.button("Find route"): 
+    with st.spinner("Calculating routes..."):
+        if not start_input or not end_input:
+            st.error("Please enter a starting point and a destination.")
+            st.stop() #Stop the app if either input is missing, to avoid errors in geocoding.
+        clean_start_input = clean_location_input(start_input)
+        if clean_start_input is None:
+            st.error("Couldn't understand starting point. Please check your input and try again.")
+            st.stop()
+        try: 
+            start_point = ox.geocoder.geocode(clean_start_input)
+        except Exception as e:
+            st.error(f"Couldn't geocode starting point: {e}")
+            st.stop()
+        if start_point is None:
+            st.error("Couldn't geocode starting point. Please check your input and try again.")
+            st.stop()
+        clean_end_input = clean_location_input(end_input)
+        if clean_end_input is None:
+            st.error("Couldn't understand destination. Please check your input and try again.")
+            st.stop()
+        try:
+            end_point = ox.geocoder.geocode(clean_end_input)
+        except Exception as e:
+            st.error(f"Couldn't geocode destination: {e}")
+            st.stop()
+        if end_point is None:
+            st.error("Couldn't geocode destination. Please check your input and try again.")
+            st.stop()
+
+
+        st.info("Loading graph data for the specified area...")
+        st.session_state.mid_lat = (start_point[0] + end_point[0]) / 2
+        st.session_state.mid_lon = (start_point[1] + end_point[1]) / 2
+
+        distance = ox.distance.great_circle(start_point[0], start_point[1], end_point[0], end_point[1])
+
+        G, edges = load_graph(f"{st.session_state.mid_lat},{st.session_state.mid_lon}", dist=int(distance/2) + 500)
+
+        mask = edges_preprocessed.index.isin(edges.index)
+        noise_normalised = normalise(edges_preprocessed.loc[mask, noise_column]).reindex(edges.index)
+        
+
+        st.session_state.G = G
+        st.session_state.edges = edges
+        st.session_state.noise_normalised = noise_normalised
+        st.session_state.orig = ox.distance.nearest_nodes(st.session_state.G, X=start_point[1], Y=start_point[0])    
+        st.session_state.dest = ox.distance.nearest_nodes(st.session_state.G, X=end_point[1], Y=end_point[0])
+        st.session_state.route_fast = ox.shortest_path(st.session_state.G, st.session_state.orig, st.session_state.dest, weight='length')
+        st.session_state.route_fast_edges = ox.routing.route_to_gdf(st.session_state.G, st.session_state.route_fast)
+
+
+
+
+
+
+
+
+if st.session_state.orig is not None:
+
+    if st.session_state.noise_normalised is not None:
+        weighted_costs = apply_penalty(st.session_state.edges, k, st.session_state.noise_normalised)
+        st.session_state.weighted_costs = weighted_costs
+    else:
+        st.error("Noise data not available. Cannot calculate quiet route.")
+        st.stop()   
+
+    route_quiet = find_quiet_route(st.session_state.G, st.session_state.orig, st.session_state.dest, weighted_costs)
+    route_quiet_edges = ox.routing.route_to_gdf(st.session_state.G, route_quiet)
+
+    route_fast_gdf = st.session_state.route_fast_edges.to_crs(MAP_CRS)
+    route_quiet_gdf = route_quiet_edges.to_crs(MAP_CRS)
+    
+    #Finding which roads are in the quiet but not in the fast route.
+    quiet_road_names = route_quiet_edges['name'].explode().unique().tolist()
+    fast_road_names = st.session_state.route_fast_edges['name'].explode().unique().tolist()
+    main_roads_avoided = [road for road in fast_road_names if road not in quiet_road_names and road is not None and isinstance(road, str)] #Some roads have no names.
+    
+  
+    mask = edges_preprocessed.index.isin(st.session_state.route_fast_edges.index)
+    fast_noise = edges_preprocessed.loc[mask, noise_column].mean().round()
+
+    mask = edges_preprocessed.index.isin(route_quiet_edges.index)
+    quiet_noise = edges_preprocessed.loc[mask, noise_column].mean().round()
+
+
+    len_fast = st.session_state.route_fast_edges['length'].sum()
+    len_quiet = route_quiet_edges['length'].sum()
+
+    fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and could be improved by using more granular speed data based on road type, slope, etc.
+    quiet_time = (len_quiet / 1000 * 12).round()
+
+    st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km. Estimated time: {int(fast_time)} minutes")
+    st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet/1000:.1f} km. Estimated time: {int(quiet_time)} minutes.")
+
+
+
+
+
+
+
+# ----------------------- Generating LLM Summary of Route Differences ---------------------- Summary before map as enhances UX. 
+
+    if st.session_state.last_k_label != k_label or st.session_state.last_route != route_quiet: #Only call the LLM if the user has changed their preference or the quiet route. 
+        # calling LLM for summary
+        st.session_state.summary = generate_route_summary(fast_noise=fast_noise, quiet_noise=quiet_noise, fast_time=fast_time, quiet_time=quiet_time, main_roads_avoided=main_roads_avoided, k_label=k_label)
+        st.session_state.last_k_label = k_label
+        st.session_state.last_route = route_quiet
+    st.write(st.session_state.summary)
+
+
+
+
+# -------------- Plotting routes using Folium for interactive map ------------------
+   
+    m = folium.Map(location=[st.session_state.mid_lat, st.session_state.mid_lon], zoom_start=15, tiles="cartodbpositron")
+    folium.GeoJson(route_fast_gdf, name="Fast Route", style_function=lambda x: {'color': 'red', 'weight': 4, 'opacity': 0.7}).add_to(m)
+    folium.GeoJson(route_quiet_gdf, name="Quiet Route", style_function=lambda x: {'color': 'green', 'weight': 5, 'opacity': 0.9}).add_to(m)
+    folium.LayerControl().add_to(m)
+    st_folium(m, width=700, height=500, returned_objects=[]) #returned objects means we don't have to process user interactions with the map. 

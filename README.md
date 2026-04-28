@@ -7,7 +7,7 @@ It then maps the fastest route and the quietest route available, and the LLM ret
 ## Tech Stack 
 - Python, osmnx, networkx, geopandas — graph construction and spatial analysis
 - Streamlit + Folium — interactive UI and map visualisation
-- Anthropic API (Claude) — natural language route summary
+- Anthropic API (Claude) — user input cleaning and natural language route summary 
 - OpenData BCN — real noise pollution data (GeoPackage)
 
 
