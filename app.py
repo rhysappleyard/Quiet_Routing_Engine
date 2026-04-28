@@ -3,7 +3,6 @@ from llm import clean_location_input, generate_route_summary
 import geopandas as gpd
 import streamlit as st
 import osmnx as ox
-import networkx as nx
 import folium
 from streamlit_folium import st_folium
 
