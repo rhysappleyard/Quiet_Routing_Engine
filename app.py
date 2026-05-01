@@ -39,6 +39,8 @@ def init_session_state():#Turned into a function as had too many variables to in
         'last_route': None,
         'G': None,
         'edges': None,
+        'mid_lat': 41.3874, #Defaulting to central Barcelona coordinates for map centering before user input.
+        'mid_lon': 2.1686, 
         'noise_normalised': None,
         'route_fast_edges': None,
     }
@@ -52,7 +54,7 @@ MAP_CRS = "EPSG:4326"  #and then convert back to WGS84 (EPSG:4326) for mapping a
 
 
 
-@st.cache_resource
+@st.cache_resource(show_spinner="Loading Barcelona street network (42MB)...")
 def load_graph():
     # Load the local GraphML file for Barcelona.
     G = ox.load_graphml("data/barcelona_walk.graphml") 
@@ -64,7 +66,7 @@ G_GLOBAL, EDGES_GLOBAL = load_graph() #Loading the graph globally to avoid repea
 
 noise_column = get_noise_column() 
 
-@st.cache_data
+@st.cache_data(show_spinner="Loading noise datasets (14MB)...")
 def load_preprocessed():
     return gpd.read_parquet("data/edges_preprocessed.parquet")
 
@@ -90,10 +92,11 @@ k = mapping[k_label]
 
 # ------------ ROUTE MAPPING, VISUALISATION AND SUMMARY ------------- #Button block is separated to allow for faster iterations on routing. 
 
+pb = st.empty() #allows for switching slider without placeholder error
 
 if st.sidebar.button("Find route"): 
 
-    progress_bar = st.progress(0)
+    pb.progress(0)
     with st.status("Analysing Barcelona noise levels...", expanded=True) as status:
         st.write("Geocoding locations...")
         if not start_input or not end_input:
@@ -123,10 +126,11 @@ if st.sidebar.button("Find route"):
         if end_point is None:
             st.error("Couldn't geocode destination. Please check your input and try again.")
             st.stop()
-        progress_bar.progress(20)
+        pb.progress(20)
 
 
-    
+        st.session_state.mid_lat = (start_point[0] + end_point[0]) / 2
+        st.session_state.mid_lon = (start_point[1] + end_point[1]) / 2
 
         st.session_state.G = G_GLOBAL
         st.session_state.edges = EDGES_GLOBAL
@@ -143,13 +147,12 @@ if st.sidebar.button("Find route"):
         st.session_state.route_fast_edges = ox.routing.route_to_gdf(st.session_state.G, st.session_state.route_fast)
 
         status.update(label="Locations Found", state="complete", expanded=False)
-        progress_bar.progress(40)
+        pb.progress(40)
 
 
 
 if st.session_state.orig is not None:
     with st.spinner("Applying noise penalties to roads..."):
-
         if st.session_state.noise_normalised is not None:
             weighted_costs = apply_penalty(st.session_state.edges, k, st.session_state.noise_normalised)
             st.session_state.weighted_costs = weighted_costs
@@ -157,13 +160,15 @@ if st.session_state.orig is not None:
             st.error("Noise data not available. Cannot calculate quiet route.")
             st.stop()   
         
+
+    with st.spinner("Optimising quiet route..."):
         route_quiet = find_quiet_route(st.session_state.G, st.session_state.orig, st.session_state.dest, weighted_costs)
         route_quiet_edges = ox.routing.route_to_gdf(st.session_state.G, route_quiet)
 
         route_fast_gdf = st.session_state.route_fast_edges.to_crs(MAP_CRS)
         route_quiet_gdf = route_quiet_edges.to_crs(MAP_CRS)
         
-        progress_bar.progress(60)
+        pb.progress(60)
         #Finding which roads are in the quiet but not in the fast route.
         quiet_road_names = route_quiet_edges['name'].explode().unique().tolist()
         fast_road_names = st.session_state.route_fast_edges['name'].explode().unique().tolist()
@@ -182,8 +187,12 @@ if st.session_state.orig is not None:
         fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and could be improved by using more granular speed data based on road type, slope, etc.
         quiet_time = (len_quiet / 1000 * 12).round()
 
-        st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km. Estimated time: {int(fast_time)} minutes")
-        st.metric(label=f"Quiet Route, {k_label} mode", value=f"{len_quiet/1000:.1f} km. Estimated time: {int(quiet_time)} minutes.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km", delta=f"{int(fast_time)} mins", delta_color="inverse")
+        with col2:
+            st.metric(label=f"Quiet ({k_label})", value=f"{len_quiet/1000:.1f} km", delta=f"{int(quiet_time)} mins")
         
         
     
@@ -195,21 +204,22 @@ if st.session_state.orig is not None:
 
     if st.session_state.last_k_label != k_label or st.session_state.last_route != route_quiet: #Only call the LLM if the user has changed their preference or the quiet route. 
         # calling LLM for summary
-        st.session_state.summary = generate_route_summary(fast_noise=fast_noise, quiet_noise=quiet_noise, fast_time=fast_time, quiet_time=quiet_time, main_roads_avoided=main_roads_avoided, k_label=k_label)
-        st.session_state.last_k_label = k_label
-        st.session_state.last_route = route_quiet
+        with st.spinner("Generating route summary..."):
+            st.session_state.summary = generate_route_summary(fast_noise=fast_noise, quiet_noise=quiet_noise, fast_time=fast_time, quiet_time=quiet_time, main_roads_avoided=main_roads_avoided, k_label=k_label)
+            st.session_state.last_k_label = k_label
+            st.session_state.last_route = route_quiet
     st.write(st.session_state.summary)
-    progress_bar.progress(80)
+    pb.progress(80)
 
 
 
 # -------------- Plotting routes using Folium for interactive map ------------------
    
-    m = folium.Map(location=[41.3874, 2.1686], zoom_start=15, tiles="cartodbpositron")
+    m = folium.Map(location=[st.session_state.mid_lat, st.session_state.mid_lon], zoom_start=15, tiles="cartodbpositron")
     folium.GeoJson(route_fast_gdf, name="Fast Route", style_function=lambda x: {'color': 'red', 'weight': 4, 'opacity': 0.7}).add_to(m)
     folium.GeoJson(route_quiet_gdf, name="Quiet Route", style_function=lambda x: {'color': 'green', 'weight': 5, 'opacity': 0.9}).add_to(m)
     folium.LayerControl().add_to(m)
     st_folium(m, width=700, height=500, returned_objects=[]) #returned objects means we don't have to process user interactions with the map. 
 
-    progress_bar.progress(100)
-    progress_bar.empty()
+    pb.progress(100)
+    pb.empty()
