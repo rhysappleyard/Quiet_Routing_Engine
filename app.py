@@ -72,6 +72,8 @@ def load_preprocessed():
 
 edges_preprocessed = load_preprocessed()
 
+st.title("Barcelona Quiet Route Finder")
+
 start_input = st.sidebar.text_input("Enter your starting point (e.g., 'Plaça de Catalunya, Barcelona'):", placeholder="Parc Joan Miró, Barcelona")
 end_input = st.sidebar.text_input("Enter your destination (e.g., 'Sagrada Família, Barcelona'):", placeholder="Sagrada Família, Barcelona")
 
