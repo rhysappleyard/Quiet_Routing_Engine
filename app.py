@@ -159,6 +159,12 @@ if st.sidebar.button("Find route"):
             status.update(label="Locations Found", state="complete", expanded=False)
             pb.progress(40)
 
+
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+
 with st.sidebar.expander("About this app"):
     st.caption(
         """
