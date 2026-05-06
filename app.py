@@ -62,6 +62,7 @@ def load_graph():
     _, edges = ox.graph_to_gdfs(G)
     return G, edges
 
+
 G_GLOBAL, EDGES_GLOBAL = load_graph() #Loading the graph globally to avoid repeated loading during development.
 
 noise_column = get_noise_column() 
@@ -145,12 +146,16 @@ if st.sidebar.button("Find route"):
             st.session_state.G = G_GLOBAL
             st.session_state.edges = EDGES_GLOBAL
 
+            # Ensure G is in degrees before snapping
+            st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
+
 
             mask = edges_preprocessed.index.isin(EDGES_GLOBAL.index)
             noise_normalised = normalise(edges_preprocessed.loc[mask, noise_column]).reindex(EDGES_GLOBAL.index)
             
 
             st.session_state.noise_normalised = noise_normalised
+            
             st.session_state.orig = ox.distance.nearest_nodes(st.session_state.G, X=start_point[1], Y=start_point[0])    
             st.session_state.dest = ox.distance.nearest_nodes(st.session_state.G, X=end_point[1], Y=end_point[0])
             st.session_state.route_fast = ox.shortest_path(st.session_state.G, st.session_state.orig, st.session_state.dest, weight='length')
