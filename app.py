@@ -146,10 +146,7 @@ if st.sidebar.button("Find route"):
             st.session_state.G = G_GLOBAL
             st.session_state.edges = EDGES_GLOBAL
 
-            st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
-
-            if st.session_state.G.graph.get('crs') != "EPSG:4326":
-                st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
+            
 
 
             mask = edges_preprocessed.index.isin(EDGES_GLOBAL.index)

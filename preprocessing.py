@@ -23,10 +23,8 @@ G_proj = ox.project_graph(G, to_crs=BCN_CRS)
 
 edges = ox.graph_to_gdfs(G_proj, nodes=False)
 gpkg = gpd.read_file('data/noise_data_2017.gpkg', layer='2017_Tramer_Mapa_Estrategic_Soroll_BCN')  #Currently not got more recent noise data available, so using most recent.
-
-bcn_crs = "EPSG:25831"
-gpkg = gpkg.to_crs(bcn_crs)
-edges = edges.to_crs(bcn_crs)
+gpkg = gpkg.to_crs(BCN_CRS)
+edges = edges.to_crs(BCN_CRS)
 
 
 joined = gpd.sjoin_nearest(
