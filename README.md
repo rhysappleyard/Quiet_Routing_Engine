@@ -12,7 +12,7 @@ It then maps the fastest route and the quietest route available, and the LLM ret
 
 
 ## How to run it
-Live demo available at quietroutingengine.streamlit.app  
+Live demo available at quietroutingenginebcn.streamlit.app  
 Please note this is currently a work in progress, and there are caching and data joining issues which I'm currently solving. 
 
 ## Methodology 
