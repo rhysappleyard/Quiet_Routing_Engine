@@ -146,12 +146,9 @@ if st.sidebar.button("Find route"):
             st.session_state.G = G_GLOBAL
             st.session_state.edges = EDGES_GLOBAL
 
-            
-
 
             mask = edges_preprocessed.index.isin(EDGES_GLOBAL.index)
             noise_normalised = normalise(edges_preprocessed.loc[mask, noise_column]).reindex(EDGES_GLOBAL.index)
-            
 
             st.session_state.noise_normalised = noise_normalised
             st.session_state.orig = ox.distance.nearest_nodes(st.session_state.G, X=start_point[1], Y=start_point[0])    
@@ -163,7 +160,7 @@ if st.sidebar.button("Find route"):
             pb.progress(40)
 
 
-st.sidebar.markdown("<br>" * 10, unsafe_allow_html=True)
+st.sidebar.markdown("<br>" * 8, unsafe_allow_html=True)
 with st.sidebar.expander("About this app"):
     st.caption(
         """

@@ -13,8 +13,9 @@ def clean_location_input(raw_text):
             If they input "Joan Miró Park near Plaça Espanya", you should return "Parc Joan Miró, Barcelona". 
             If they input "Plaça de Catalunya", you should return "Plaça de Catalunya, Barcelona".
             If they input "Hotel W", you should return "Hotel W, Barcelona".
+            If they input "Pasha", you should return "Pacha, Barcelona".
             Return only the place name, no explanation, no punctuation other than commas, nothing else.
-            If and only if the input is not a recognisable location for Barcelona, return only the word INVALID and nothing else.
+            Return only locations for Barcelona. If and only if the input is not recognisable as a location in Barcelona, return only the word INVALID and nothing else.
             """,
             messages = [{"role": "user", "content": raw_text}])
 
