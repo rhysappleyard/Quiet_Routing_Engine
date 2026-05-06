@@ -146,9 +146,14 @@ if st.sidebar.button("Find route"):
             st.session_state.G = G_GLOBAL
             st.session_state.edges = EDGES_GLOBAL
 
-            # Ensure G is in degrees before snapping
             st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
+            # Force the graph back to WGS84 degrees before snapping
+            if st.session_state.G.graph.get('crs') != "EPSG:4326":
+                st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
 
+            # Now the search will find the node at (2.14, 41.37) degrees, not meters
+            st.session_state.orig = ox.distance.nearest_nodes(st.session_state.G, X=start_point[1], Y=start_point[0])    
+            st.session_state.dest = ox.distance.nearest_nodes(st.session_state.G, X=end_point[1], Y=end_point[0])
 
             mask = edges_preprocessed.index.isin(EDGES_GLOBAL.index)
             noise_normalised = normalise(edges_preprocessed.loc[mask, noise_column]).reindex(EDGES_GLOBAL.index)
