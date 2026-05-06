@@ -69,7 +69,7 @@ noise_column = get_noise_column()
 
 @st.cache_data(show_spinner="Loading noise datasets (14MB)...")
 def load_preprocessed():
-    return gpd.read_parquet("data/edges_preprocessed.parquet")
+    return gpd.read_parquet("data/edges_preprocessed_v2.parquet")
 
 edges_preprocessed = load_preprocessed()
 
@@ -147,7 +147,7 @@ if st.sidebar.button("Find route"):
             st.session_state.edges = EDGES_GLOBAL
 
             st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
-            
+
             if st.session_state.G.graph.get('crs') != "EPSG:4326":
                 st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
 
