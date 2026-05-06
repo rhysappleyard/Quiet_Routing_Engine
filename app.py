@@ -57,7 +57,7 @@ MAP_CRS = "EPSG:4326"  #and then convert back to WGS84 (EPSG:4326) for mapping a
 @st.cache_resource(show_spinner="Loading Barcelona street network (42MB)...")
 def load_graph():
     # Load the local GraphML file for Barcelona.
-    G = ox.load_graphml("data/barcelona_walk.graphml") 
+    G = ox.load_graphml("data/barcelona_walk_v2.graphml") 
     # Convert to GeoDataFrame once and cache
     _, edges = ox.graph_to_gdfs(G)
     return G, edges
@@ -165,26 +165,16 @@ if st.sidebar.button("Find route"):
             status.update(label="Locations Found", state="complete", expanded=False)
             pb.progress(40)
 
-#Pushing the Info section further down the sidebar.
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
-st.sidebar.write("\n")
 
+st.sidebar.markdown("<br>" * 10, unsafe_allow_html=True)
 with st.sidebar.expander("About this app"):
     st.caption(
         """
         This app helps you find quieter walking routes in Barcelona by applying noise penalties to the road network.""")
-    st.caption("""**Data sources:** OpenStreetMap, Barcelona noise dataset (Ajuntament de Barcelona).""")
+    st.caption("""**Data sources:** OpenStreetMap, Barcelona noise dataset (Ajuntament de Barcelona).
+               See https://coneixement-eu.bcn.cat/widget/atles-viewer-eng/index.html?map=ar_er_cac_nsoroll for a visualisation of the noise data.""")
     st.caption("Developed by Rhys Appleyard 2026.")
+
     
 
 if st.session_state.orig is not None:
