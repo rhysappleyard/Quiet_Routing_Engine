@@ -26,7 +26,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-ox.settings.use_cache = False #Turning off caching in OSMNX to avoid issues with stale data during development. In a production environment, this should be turned on for performance.
+ox.settings.use_cache = False #Turning off caching in OSMNX to avoid issues with stale data during development.
 
 # ------------------------ Streamlit Session State Initialisation ------------------------
 def init_session_state():#Turned into a function as had too many variables to initialise. 
@@ -74,6 +74,10 @@ edges_preprocessed = load_preprocessed()
 
 st.title("Barcelona Quiet Route Finder")
 
+st.sidebar.header("Route Preferences")
+
+
+
 start_input = st.sidebar.text_input("Enter your starting point (e.g., 'Plaça de Catalunya, Barcelona'):", placeholder="Parc Joan Miró, Barcelona")
 end_input = st.sidebar.text_input("Enter your destination (e.g., 'Sagrada Família, Barcelona'):", placeholder="Sagrada Família, Barcelona")
 
@@ -96,62 +100,72 @@ k = mapping[k_label]
 
 pb = st.empty() #allows for switching slider without placeholder error
 
-if st.sidebar.button("Find route"): 
-
-    pb.progress(0)
-    with st.status("Analysing Barcelona noise levels...", expanded=True) as status:
-        st.write("Geocoding locations...")
-        if not start_input or not end_input:
-            st.error("Please enter a starting point and a destination.")
-            st.stop() #Stop the app if either input is missing, to avoid errors in geocoding.
-        clean_start_input = clean_location_input(start_input)
-        if clean_start_input is None:
-            st.error("Couldn't understand starting point. Please check your input and try again.")
-            st.stop()
-        try: 
-            start_point = ox.geocoder.geocode(clean_start_input)
-        except Exception as e:
-            st.error(f"Couldn't geocode starting point: {e}")
-            st.stop()
-        if start_point is None:
-            st.error("Couldn't geocode starting point. Please check your input and try again.")
-            st.stop()
-        clean_end_input = clean_location_input(end_input)
-        if clean_end_input is None:
-            st.error("Couldn't understand destination. Please check your input and try again.")
-            st.stop()
-        try:
-            end_point = ox.geocoder.geocode(clean_end_input)
-        except Exception as e:
-            st.error(f"Couldn't geocode destination: {e}")
-            st.stop()
-        if end_point is None:
-            st.error("Couldn't geocode destination. Please check your input and try again.")
-            st.stop()
-        pb.progress(20)
-
-
-        st.session_state.mid_lat = (start_point[0] + end_point[0]) / 2
-        st.session_state.mid_lon = (start_point[1] + end_point[1]) / 2
-
-        st.session_state.G = G_GLOBAL
-        st.session_state.edges = EDGES_GLOBAL
+if st.sidebar.button("Find route"):
+    if not start_input or not end_input:
+        st.sidebar.error("Please enter both a start and destination.")
+    else:
+        pb.progress(0)
+        with st.status("Analysing Barcelona noise levels...", expanded=True) as status:
+            clean_start_input = clean_location_input(start_input)
+            if clean_start_input is None: #LLM returns None if it can't understand the input, which is handled here.
+                pb.empty()
+                st.error("Couldn't understand starting point. Please check your input and try again.")
+                st.stop()
+            try: 
+                start_point = ox.geocoder.geocode(clean_start_input)
+            except Exception as e:
+                pb.empty()
+                st.error(f"Couldn't geocode starting point: {e}")
+                st.stop()
+            if start_point is None:
+                pb.empty()
+                st.error("Couldn't geocode starting point. Please check your input and try again.")
+                st.stop()
+            clean_end_input = clean_location_input(end_input)
+            if clean_end_input is None:
+                pb.empty()
+                st.error("Couldn't understand destination. Please check your input and try again.")
+                st.stop()
+            try:
+                end_point = ox.geocoder.geocode(clean_end_input)
+            except Exception as e:
+                pb.empty()
+                st.error(f"Couldn't geocode destination: {e}")
+                st.stop()
+            if end_point is None:
+                pb.empty()
+                st.error("Couldn't geocode destination. Please check your input and try again.")
+                st.stop()
+            pb.progress(20)
 
 
-        mask = edges_preprocessed.index.isin(EDGES_GLOBAL.index)
-        noise_normalised = normalise(edges_preprocessed.loc[mask, noise_column]).reindex(EDGES_GLOBAL.index)
-        
+            st.session_state.mid_lat = (start_point[0] + end_point[0]) / 2
+            st.session_state.mid_lon = (start_point[1] + end_point[1]) / 2
 
-        st.session_state.noise_normalised = noise_normalised
-        st.session_state.orig = ox.distance.nearest_nodes(st.session_state.G, X=start_point[1], Y=start_point[0])    
-        st.session_state.dest = ox.distance.nearest_nodes(st.session_state.G, X=end_point[1], Y=end_point[0])
-        st.session_state.route_fast = ox.shortest_path(st.session_state.G, st.session_state.orig, st.session_state.dest, weight='length')
-        st.session_state.route_fast_edges = ox.routing.route_to_gdf(st.session_state.G, st.session_state.route_fast)
-
-        status.update(label="Locations Found", state="complete", expanded=False)
-        pb.progress(40)
+            st.session_state.G = G_GLOBAL
+            st.session_state.edges = EDGES_GLOBAL
 
 
+            mask = edges_preprocessed.index.isin(EDGES_GLOBAL.index)
+            noise_normalised = normalise(edges_preprocessed.loc[mask, noise_column]).reindex(EDGES_GLOBAL.index)
+            
+
+            st.session_state.noise_normalised = noise_normalised
+            st.session_state.orig = ox.distance.nearest_nodes(st.session_state.G, X=start_point[1], Y=start_point[0])    
+            st.session_state.dest = ox.distance.nearest_nodes(st.session_state.G, X=end_point[1], Y=end_point[0])
+            st.session_state.route_fast = ox.shortest_path(st.session_state.G, st.session_state.orig, st.session_state.dest, weight='length')
+            st.session_state.route_fast_edges = ox.routing.route_to_gdf(st.session_state.G, st.session_state.route_fast)
+
+            status.update(label="Locations Found", state="complete", expanded=False)
+            pb.progress(40)
+
+with st.sidebar.expander("About this app"):
+    st.caption(
+        """
+        This app helps you find quieter walking routes in Barcelona by applying noise penalties to the road network.""")
+    st.caption("""**Data sources:** OpenStreetMap, Barcelona noise dataset (Ajuntament de Barcelona).""")
+    st.caption("Developed by Rhys Appleyard 2026.")
+    
 
 if st.session_state.orig is not None:
     with st.spinner("Applying noise penalties to roads..."):
