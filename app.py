@@ -164,6 +164,14 @@ st.sidebar.write("\n")
 st.sidebar.write("\n")
 st.sidebar.write("\n")
 st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
+st.sidebar.write("\n")
 
 with st.sidebar.expander("About this app"):
     st.caption(
