@@ -147,7 +147,7 @@ if st.sidebar.button("Find route"):
             st.session_state.edges = EDGES_GLOBAL
 
             st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
-            # Force the graph back to WGS84 degrees before snapping
+            
             if st.session_state.G.graph.get('crs') != "EPSG:4326":
                 st.session_state.G = ox.project_graph(st.session_state.G, to_crs=MAP_CRS)
 

@@ -9,9 +9,9 @@ import geopandas as gpd
 import pandas as pd
 
 
-graph = ox.graph_from_place('Barcelona, Spain', network_type='walk')
+graph = ox.graph_from_point((41.3874, 2.1686), dist=5000, network_type='walk')
 edges = ox.graph_to_gdfs(graph, nodes=False)
-gpkg = gpd.read_file('noise_data_2017.gpkg', layer='2017_Tramer_Mapa_Estrategic_Soroll_BCN')  #No recent noise data available so using most recent.
+gpkg = gpd.read_file('data/noise_data_2017.gpkg', layer='2017_Tramer_Mapa_Estrategic_Soroll_BCN')  #Currently not got more recent noise data available, so using most recent.
 
 bcn_crs = "EPSG:25831"
 gpkg = gpkg.to_crs(bcn_crs)
@@ -41,6 +41,6 @@ edges["TOTAL_N"] = night_values
 edges['osmid'] = edges['osmid'].astype(str)
 for col in edges.select_dtypes(include='object').columns:
     edges[col] = edges[col].astype(str)
-edges.to_parquet("edges_preprocessed.parquet")
+edges.to_parquet("edges_preprocessed_v2.parquet")
 
 
