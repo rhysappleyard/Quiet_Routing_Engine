@@ -54,7 +54,7 @@ MAP_CRS = "EPSG:4326"  #and then convert back to WGS84 (EPSG:4326) for mapping a
 
 
 
-@st.cache_resource(show_spinner="Loading Barcelona street network (42MB)...")
+@st.cache_resource(show_spinner="Loading Barcelona street network (88MB)...")
 def load_graph():
     # Load the local GraphML file for Barcelona.
     G = ox.load_graphml("data/barcelona_walk_v2.graphml") 
