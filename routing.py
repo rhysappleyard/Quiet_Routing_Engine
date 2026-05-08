@@ -27,6 +27,17 @@ def get_noise_column():
 def normalise(series):
     return ((series - series.min()) / (series.max() - series.min())).clip(0, 1)
 
+def format_time(minutes):
+    hours = minutes // 60
+    mins = minutes % 60
+    
+    if mins == 0:
+        return f"{hours}h"
+    else:
+        return f"{hours}h{mins}m"
+
+
+
 def apply_penalty(edges, k, noise_normalised):
     penalty = ((1 + noise_normalised) ** k) - 1
     weighted_costs = edges['length'] * (1 + penalty) #Applying the noise constraints to the edges, with the selected k value.

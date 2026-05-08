@@ -1,4 +1,4 @@
-from routing import get_noise_column, normalise, apply_penalty, find_quiet_route
+from routing import get_noise_column, normalise, apply_penalty, find_quiet_route, format_time
 from llm import clean_location_input, generate_route_summary
 import geopandas as gpd
 import streamlit as st
@@ -25,8 +25,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
-ox.settings.use_cache = False #Turning off caching in OSMNX to avoid issues with stale data during development.
 
 # ------------------------ Streamlit Session State Initialisation ------------------------
 def init_session_state():#Turned into a function as had too many variables to initialise. 
@@ -107,6 +105,11 @@ if st.sidebar.button("Find route"):
         pb.progress(0)
         with st.status("Analysing Barcelona noise levels...", expanded=True) as status:
             clean_start_input = clean_location_input(start_input)
+            if clean_start_input is False:
+                pb.empty()
+                st.error("Anthropic server error. Please try again later.")
+                status.update(state="error")
+                st.stop()
             if clean_start_input is None: #LLM returns None if it can't understand the input, which is handled here.
                 pb.empty()
                 st.error("Couldn't understand starting point. Please check your input and try again.")
@@ -128,6 +131,11 @@ if st.sidebar.button("Find route"):
             if clean_end_input is None:
                 pb.empty()
                 st.error("Couldn't understand destination. Please check your input and try again.")
+                status.update(state="error")
+                st.stop()
+            if clean_end_input is False:
+                pb.empty()
+                st.error("Anthropic server error. Please try again later.")
                 status.update(state="error")
                 st.stop()
             try:
@@ -208,9 +216,10 @@ if st.session_state.orig is not None:
 
         len_fast = st.session_state.route_fast_edges['length'].sum()
         len_quiet = route_quiet_edges['length'].sum()
+    
 
-        fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and could be improved by using more granular speed data based on road type, slope, etc.
-        quiet_time = (len_quiet / 1000 * 12).round()
+        fast_time = format_time((len_fast / 1000 * 12).round()) #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and I could improve by using more granular speed data based on road type, slope, etc.
+        quiet_time = format_time((len_quiet / 1000 * 12).round())
 
         
         col1, col2 = st.columns(2)
@@ -222,13 +231,9 @@ if st.session_state.orig is not None:
         
     
 
-
-
-
 # ----------------------- Generating LLM Summary of Route Differences ---------------------- Summary before map as enhances UX. 
 
-    if st.session_state.last_k_label != k_label or st.session_state.last_route != route_quiet: #Only call the LLM if the user has changed their preference or the quiet route. 
-        # calling LLM for summary
+    if st.session_state.last_k_label != k_label or st.session_state.last_route != route_quiet: #We only call the LLM if the user has changed their preference or the quiet route. 
         with st.spinner("Generating route summary..."):
             st.session_state.summary = generate_route_summary(fast_noise=fast_noise, quiet_noise=quiet_noise, fast_time=fast_time, quiet_time=quiet_time, main_roads_avoided=main_roads_avoided, k_label=k_label)
             st.session_state.last_k_label = k_label
@@ -238,7 +243,7 @@ if st.session_state.orig is not None:
 
 
 
-# -------------- Plotting routes using Folium for interactive map ------------------
+# -------------- Folium for interactive map ------------------
    
     m = folium.Map(location=[st.session_state.mid_lat, st.session_state.mid_lon], zoom_start=15, tiles="cartodbpositron")
     folium.GeoJson(route_fast_gdf, name="Fast Route", style_function=lambda x: {'color': 'red', 'weight': 4, 'opacity': 0.7}).add_to(m)
