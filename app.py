@@ -85,11 +85,10 @@ end_input = st.sidebar.text_input("Enter your destination (e.g., 'Sagrada Famíl
 # -------------------- STREAMLIT SLIDER FOR NOISE SENSITIVITY (k) --------------------
 k_label = st.sidebar.select_slider(    #Tuning parameter to adjust influence of noise on the overall cost. 
         'Walking preference',
-        options=['Efficient', 'Balanced', 'Quiet', 'Serene'],
-        value='Balanced'    #Hardcoded starting point
+        options=['Balanced', 'Quiet', 'Serene'],
+        value='Balanced'    #Hardcoding Balanced startpoint.
     )
 mapping = {
-        'Efficient': 0.5,
         'Balanced': 1.5,
         'Quiet': 3,
         'Serene': 5
