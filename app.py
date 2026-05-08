@@ -1,4 +1,4 @@
-from routing import get_noise_column, apply_penalty, normalise, find_quiet_route
+from routing import get_noise_column, normalise, apply_penalty, find_quiet_route
 from llm import clean_location_input, generate_route_summary
 import geopandas as gpd
 import streamlit as st
@@ -111,31 +111,37 @@ if st.sidebar.button("Find route"):
             if clean_start_input is None: #LLM returns None if it can't understand the input, which is handled here.
                 pb.empty()
                 st.error("Couldn't understand starting point. Please check your input and try again.")
+                status.update(state="error")
                 st.stop()
             try: 
                 start_point = ox.geocoder.geocode(clean_start_input)
             except Exception as e:
                 pb.empty()
                 st.error(f"Couldn't geocode starting point: {e}")
+                status.update(state="error")
                 st.stop()
             if start_point is None:
                 pb.empty()
                 st.error("Couldn't geocode starting point. Please check your input and try again.")
+                status.update(state="error")
                 st.stop()
             clean_end_input = clean_location_input(end_input)
             if clean_end_input is None:
                 pb.empty()
                 st.error("Couldn't understand destination. Please check your input and try again.")
+                status.update(state="error")
                 st.stop()
             try:
                 end_point = ox.geocoder.geocode(clean_end_input)
             except Exception as e:
                 pb.empty()
                 st.error(f"Couldn't geocode destination: {e}")
+                status.update(state="error")
                 st.stop()
             if end_point is None:
                 pb.empty()
                 st.error("Couldn't geocode destination. Please check your input and try again.")
+                status.update(state="error")
                 st.stop()
             pb.progress(20)
 

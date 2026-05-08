@@ -24,7 +24,8 @@ def get_noise_column():
         col = 'TOTAL_N'
     return col
 
-
+def normalise(series):
+    return ((series - series.min()) / (series.max() - series.min())).clip(0, 1)
 
 def apply_penalty(edges, k, noise_normalised):
     penalty = ((1 + noise_normalised) ** k) - 1
@@ -32,9 +33,6 @@ def apply_penalty(edges, k, noise_normalised):
     weighted_costs = weighted_costs.fillna(1e-6).clip(lower=1e-6) # Avoiding NaN, zero or negative weights which can mess with Dijkstra's algorithm. 
     return weighted_costs
 
-
-def normalise(series):
-    return ((series - series.min()) / (series.max() - series.min())).clip(0, 1)
 
 def find_quiet_route(G, orig, dest, weighted_costs):
     nx.set_edge_attributes(G, weighted_costs.to_dict(), 'weighted_costs')
