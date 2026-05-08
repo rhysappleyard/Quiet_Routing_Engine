@@ -33,7 +33,7 @@ def clean_location_input(raw_text):
 
 def generate_route_summary(fast_time, quiet_time, fast_noise, quiet_noise, main_roads_avoided, k_label):
         try: 
-            user_prompt = f"""Fast route time: {fast_time} mins. Quiet route time: {quiet_time} mins.
+            user_prompt = f"""Fast route time: {fast_time}. Quiet route time: {quiet_time}.
                     Average noise on fast route: {fast_noise} dB.
                     Average noise on quiet route: {quiet_noise} dB.
                     Main roads avoided: {', '.join(main_roads_avoided[:3])}.""" #Limiting to 3 main roads avoided for brevity. 

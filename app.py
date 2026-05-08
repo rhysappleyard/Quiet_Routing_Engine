@@ -221,13 +221,16 @@ if st.session_state.orig is not None:
         fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and I could improve by using more granular speed data based on road type, slope, etc.
         quiet_time = (len_quiet / 1000 * 12).round()
 
+        fast_time_str = format_time(int(fast_time))
+        quiet_time_str = format_time(int(quiet_time))
+
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km", delta=format_time(int(fast_time)), delta_color="off")
+            st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km", delta=fast_time_str, delta_color="off")
             st.metric(label="Average Noise on Fast Route", value=f"{fast_noise} dB", delta =f"+{(fast_noise - quiet_noise):.0f} dB", delta_color="inverse")
         with col2:
-            st.metric(label=f"{k_label} Route", value=f"{len_quiet/1000:.1f} km", delta=format_time(int(quiet_time)), delta_color="off")
+            st.metric(label=f"{k_label} Route", value=f"{len_quiet/1000:.1f} km", delta=quiet_time_str, delta_color="off")
             st.metric(label=f"Average Noise on {k_label} Route", value=f"{quiet_noise} dB", delta =f"{(quiet_noise - fast_noise):.0f} dB", delta_color="inverse")
         
         
@@ -237,7 +240,7 @@ if st.session_state.orig is not None:
 
     if st.session_state.last_k_label != k_label or st.session_state.last_route != route_quiet: #We only call the LLM if the user has changed their preference or the quiet route. 
         with st.spinner("Generating route summary..."):
-            st.session_state.summary = generate_route_summary(fast_noise=fast_noise, quiet_noise=quiet_noise, fast_time=fast_time, quiet_time=quiet_time, main_roads_avoided=main_roads_avoided, k_label=k_label)
+            st.session_state.summary = generate_route_summary(fast_noise=fast_noise, quiet_noise=quiet_noise, fast_time=fast_time_str, quiet_time=quiet_time_str, main_roads_avoided=main_roads_avoided, k_label=k_label)
             st.session_state.last_k_label = k_label
             st.session_state.last_route = route_quiet
     st.write(st.session_state.summary)
