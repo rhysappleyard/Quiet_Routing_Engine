@@ -224,9 +224,9 @@ if st.session_state.orig is not None:
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric(label="Fast Route", value=fast_time)
+            st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km", delta=(fast_time), delta_color="inverse")
         with col2:
-            st.metric(label=f"({k_label} Route)", value=quiet_time)
+            st.metric(label=f"({k_label} Route)", value=f"{len_quiet/1000:.1f} km", delta=quiet_time)
         
         
     
