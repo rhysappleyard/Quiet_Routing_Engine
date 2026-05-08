@@ -27,10 +27,10 @@ def get_noise_column():
 def normalise(series):
     return ((series - series.min()) / (series.max() - series.min())).clip(0, 1)
 
+
 def format_time(minutes):
     hours = minutes // 60
     mins = minutes % 60
-    
     if mins == 0:
         return f"{hours}h"
     else:
