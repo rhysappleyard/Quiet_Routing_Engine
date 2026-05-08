@@ -224,10 +224,10 @@ if st.session_state.orig is not None:
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km", delta=format_time(int(fast_time)))
+            st.metric(label="Fast Route", value=f"{len_fast/1000:.1f} km", delta=format_time(int(fast_time)), delta_color="off")
             st.metric(label="Average Noise on Fast Route", value=f"{fast_noise} dB", delta =f"+{(fast_noise - quiet_noise):.0f} dB", delta_color="inverse")
         with col2:
-            st.metric(label=f"{k_label} Route", value=f"{len_quiet/1000:.1f} km", delta=format_time(int(quiet_time)))
+            st.metric(label=f"{k_label} Route", value=f"{len_quiet/1000:.1f} km", delta=format_time(int(quiet_time)), delta_color="off")
             st.metric(label=f"Average Noise on {k_label} Route", value=f"{quiet_noise} dB", delta =f"{(quiet_noise - fast_noise):.0f} dB", delta_color="inverse")
         
         
