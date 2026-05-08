@@ -218,8 +218,8 @@ if st.session_state.orig is not None:
         len_quiet = route_quiet_edges['length'].sum()
     
 
-        fast_time = format_time((len_fast / 1000 * 12).round()) #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and I could improve by using more granular speed data based on road type, slope, etc.
-        quiet_time = format_time((len_quiet / 1000 * 12).round())
+        fast_time = (len_fast / 1000 * 12).round() #Assuming an average walking speed of 5 km/h, which is 12 minutes per km. This is a simplification and I could improve by using more granular speed data based on road type, slope, etc.
+        quiet_time = (len_quiet / 1000 * 12).round()
 
         
         col1, col2 = st.columns(2)
